@@ -42,7 +42,7 @@ void PNTpackage::on_btnSrc_clicked()
     QString fileSrc = QFileDialog::getOpenFileName(this,
                                             tr("打开文件"),
                                             QApplication::applicationDirPath(),
-                                            tr("binary file (*.pnt *.bin)"));
+                                            tr("binary file (*.pnt)"));
     if(fileSrc.isEmpty())
         return;
 
@@ -54,7 +54,7 @@ void PNTpackage::on_btnSave_clicked()
     QString fileDes = QFileDialog::getSaveFileName(this,
                                                    tr("保存文件"),
                                                    QApplication::applicationDirPath(),
-                                                   tr("binary file (*.bin *.pnt)"));
+                                                   tr("binary file (*.pnt)"));
     if(fileDes.isEmpty())
         return;
 
@@ -84,15 +84,12 @@ bool PNTpackage::convert(const QString &fileSrc, const QString &fileDes)
 {
     QFile _fileSrc(fileSrc);
     int fileSize = _fileSrc.size();//源文件的大小
-    qDebug() << "fileSize" << _fileSrc.size();
-
-    //if(fileSize%2) fileSize++;//数据异常处理
 
     if(!_fileSrc.open(QIODevice::ReadOnly)) {
         QMessageBox::warning(this, tr("提示"), QString(tr("打开文件:%1 失败！").arg(fileSrc)));
         return false;
     }
-    char *pSrcBuffer = new char[fileSize];   
+    char *pSrcBuffer = new char[fileSize];
     char *pSrcBuffer_new = new char[fileSize];
     if(pSrcBuffer == nullptr) {
         QMessageBox::warning(this, tr("提示"), QString(tr("内存分配失败！")));
@@ -111,161 +108,157 @@ bool PNTpackage::convert(const QString &fileSrc, const QString &fileDes)
     QFile _fileDes(fileDes);
     if(!_fileDes.open(QIODevice::WriteOnly)) {
         QMessageBox::warning(this, tr("提示"), QString(tr("打开文件:%1 失败！").arg(fileSrc)));
-        delete[] pSrcBuffer;        
+        delete[] pSrcBuffer;
         delete[] pSrcBuffer_new;
         return false;
     }
     for(int i= 0; i<fileSize; i++)
     {
-
-       char ver = *&pSrcBuffer[i];
-       ver = ~ ver;
-       *&pSrcBuffer[i] = ver;
+        char ver = *&pSrcBuffer[i];
+        ver = ~ ver;
+        *&pSrcBuffer[i] = ver;
     }
 
-       char val = 0, val_2 = 0;
-       int same_num = 0;
-       int diff_num = 0;
-       int i_diff = 0;
-       int i_new = 0;
-       char standardnum =  *&pSrcBuffer[0];
+    char val = 0, val_2 = 0;
+    int same_num = 0;
+    int diff_num = 0;
+    int i_diff = 0;
+    int i_new = 0;
+    char standardnum =  *&pSrcBuffer[0];
 
 
-        for(int i= 0; i<fileSize; i++)
+    for(int i= 1; i<fileSize; i++)
+    {
+
+        val = *&pSrcBuffer[i];
+
+        if(i < fileSize - 1)
+            val_2 =  *&pSrcBuffer[i + 1];
+        else
+            val_2 =  *&pSrcBuffer[i - 1];
+
+        if(standardnum == val)
         {
+            //写入不相同的字节
+            if(diff_num)
+            {
+                *&pSrcBuffer_new[i_new] = (char)(diff_num + 0x80);
+                i_new ++;
 
-           val = *&pSrcBuffer[i];
-
-           if(i < fileSize - 1)
-                 val_2 =  *&pSrcBuffer[i + 1];
-            else
-                 val_2 =  *&pSrcBuffer[i - 1];
-
-           if(standardnum == val)
-           {
-               //写入不相同的字节
-               if(diff_num)
-               {
-                   *&pSrcBuffer_new[i_new] = (char)(diff_num + 0x80);
-                   i_new ++;
-
-                   for(int i= 0; i < diff_num; i++, i_new++)
-                   {
-                       *&pSrcBuffer_new[i_new] = (char)m_diffbuf[i];
-                   }
-                   diff_num = 0;
-                   i_diff = 0;
-                   //qDebug() << "写入1";
-               }
-               else
-               {
-                   //读取字节相同
-                   if(same_num < 127)
-                   {
-                       same_num ++;
-                       if(i == fileSize - 1)
-                       {
-                           //写入相同的字节
-                           *&pSrcBuffer_new[i_new] = (char)same_num;
-                           i_new ++;
-                           *&pSrcBuffer_new[i_new] = (char)standardnum;
-                           i_new ++;
-                           same_num = 0;
-                           //qDebug() << "写入22";
-                       }
-                   }
-                   else if(same_num == 127)
-                   {
-                       //写入相同的字节
-                       *&pSrcBuffer_new[i_new] = (char)same_num;
-                       i_new ++;
-                       *&pSrcBuffer_new[i_new] = (char)standardnum;
-                       i_new ++;
-                       same_num = 0;
-                       //qDebug() << "写入2";
-                   }
+                for(int i= 0; i < diff_num; i++, i_new++)
+                {
+                    *&pSrcBuffer_new[i_new] = (char)m_diffbuf[i];
                 }
-           }
-           else if(standardnum != val)
-           {
-              //相同的字节
-               if(same_num)
-               {
-                   *&pSrcBuffer_new[i_new] = (char)same_num;
-                   i_new ++;
-                   *&pSrcBuffer_new[i_new] = (char)standardnum;
-                   i_new ++;
-                   same_num = 0;
-                   standardnum = val;
-                   //qDebug() << "写入3";
-               }
-               else
-               {
-                   if(val == val_2)
-                   {
-                       diff_num ++;
-                       m_diffbuf[i_diff] = standardnum;
-                       i_diff++;
-                       standardnum = val;
+                diff_num = 0;
+                i_diff = 0;
+            }
+            else
+            {
+                //读取字节相同
+                if(same_num < 127)
+                {
+                    same_num ++;
+                    if(i == fileSize - 1)
+                    {
+                        //写入相同的字节
+                        *&pSrcBuffer_new[i_new] = (char)same_num;
+                        i_new ++;
+                        *&pSrcBuffer_new[i_new] = (char)standardnum;
+                        i_new ++;
+                        same_num = 0;
+                    }
+                }
+                else if(same_num == 127)
+                {
+                    //写入相同的字节
+                    *&pSrcBuffer_new[i_new] = (char)same_num;
+                    i_new ++;
+                    *&pSrcBuffer_new[i_new] = (char)standardnum;
+                    i_new ++;
+                    same_num = 1;//超过127问题
 
-                       *&pSrcBuffer_new[i_new] = (char)(diff_num + 0x80);
-                       i_new ++;
-
-                       for(int i= 0; i < diff_num; i++, i_new++)
-                       {
-                           *&pSrcBuffer_new[i_new] = (char)m_diffbuf[i];
-                       }
-                       diff_num = 0;
-                       i_diff = 0;
-                       same_num ++;
-                       //qDebug() << "写入11";
-                   }
-                   else if(val != val_2)
-                   {
-                       //qDebug() << "读取异同";
-                       if(diff_num < 127)
-                       {
-                           diff_num ++;
-                           m_diffbuf[i_diff] = standardnum;
-                           i_diff++;
-                           standardnum = val;
-
-                           if(i == fileSize - 1)
-                           {
-                               diff_num ++;
-                               m_diffbuf[i_diff] = standardnum;
-                               i_diff++;
-                               standardnum = val;
-
-                               *&pSrcBuffer_new[i_new] = (char)(diff_num + 0x80);
-                               i_new ++;
-
-                               for(int i= 0; i < diff_num; i++, i_new++)
-                               {
-                                   *&pSrcBuffer_new[i_new] = (char)m_diffbuf[i];
-                               }
-                               diff_num = 0;
-                               i_diff = 0;
-                           }
-                       }
-                       else
-                       {
-                           //写入bu同的字节
-                           *&pSrcBuffer_new[i_new] = (char)(diff_num + 0x80);
-                           i_new ++;
-                           for(int i= 0; i < diff_num; i++, i_new++)
-                           {
-                               *&pSrcBuffer_new[i_new] = (char)m_diffbuf[i];
-                           }
-                           diff_num = 0;
-                           i_diff = 0;
-                       }
-                   }
-               }
-           }
-
-
+                }
+            }
         }
+        else if(standardnum != val)
+        {
+            //相同的字节
+            if(same_num)
+            {
+                same_num ++;
+                *&pSrcBuffer_new[i_new] = (char)same_num;
+                i_new ++;
+                *&pSrcBuffer_new[i_new] = (char)standardnum;
+                i_new ++;
+                same_num = 0;
+                standardnum = val;
+            }
+            else
+            {
+                if(val == val_2)
+                {
+                    diff_num ++;
+                    m_diffbuf[i_diff] = standardnum;
+                    i_diff++;
+                    standardnum = val;
+
+                    *&pSrcBuffer_new[i_new] = (char)(diff_num + 0x80);
+                    i_new ++;
+
+                    for(int i= 0; i < diff_num; i++, i_new++)
+                    {
+                        *&pSrcBuffer_new[i_new] = (char)m_diffbuf[i];
+                    }
+                    diff_num = 0;
+                    i_diff = 0;
+                    same_num = 0;//相同到相同的问题
+                }
+                else if(val != val_2)
+                {
+                    //qDebug() << "读取异同";
+                    if(diff_num < 127)
+                    {
+                        diff_num ++;
+                        m_diffbuf[i_diff] = standardnum;
+                        i_diff++;
+                        standardnum = val;
+
+                        if(i == fileSize - 1)
+                        {
+                            diff_num ++;
+                            m_diffbuf[i_diff] = standardnum;
+                            i_diff++;
+                            standardnum = val;
+
+                            *&pSrcBuffer_new[i_new] = (char)(diff_num + 0x80);
+                            i_new ++;
+
+                            for(int i= 0; i < diff_num; i++, i_new++)
+                            {
+                                *&pSrcBuffer_new[i_new] = (char)m_diffbuf[i];
+                            }
+                            diff_num = 0;
+                            i_diff = 0;
+                        }
+                    }
+                    else
+                    {
+                        //写入bu同的字节
+                        *&pSrcBuffer_new[i_new] = (char)(diff_num + 0x80);
+                        i_new ++;
+                        for(int i= 0; i < diff_num; i++, i_new++)
+                        {
+                            *&pSrcBuffer_new[i_new] = (char)m_diffbuf[i];
+                        }
+                        diff_num = 0;
+                        i_diff = 0;
+                    }
+                }
+            }
+        }
+
+
+    }
 
 
     _fileDes.write(pSrcBuffer_new, i_new);
